@@ -6,22 +6,32 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const SYSTEM_PROMPT = `You are an expert OCR system for university exam valuation sheets (MVGR College format). 
-Analyze the exam sheet image and extract ALL data into a structured JSON format.
+const SYSTEM_PROMPT = `You are an expert OCR system for university exam valuation sheets (MVGR College format).
+You must analyze the exam sheet image with EXTREME precision and extract ALL data into structured JSON.
 
-IMPORTANT RULES:
-1. Extract EVERY question's marks including all sub-parts (a, b, c OR i, ii, iii).
-2. The sheet may have Part A and Part B sections, or just columns a, b, c with totals.
-3. Look for handwritten marks in each cell carefully.
-4. Extract the "Total Marks (in figures)" - the written total at the bottom.
-5. Extract the bubble/OMR total from the filled circles on the right side (Total Marks column with bubbles 0-9).
-6. Extract "Marks in Words" (Tens Place and Units Place).
-7. Extract metadata: Exam name, Branch, Subject Code, Subject Name, Examiner Name, Scrutinizer Name.
-8. Extract Bundle Number / Control Bundle No.
-9. Extract Valuation number (1 or 2) from the right side.
-10. If a field is not visible or not present, use null.
-11. For marks, use numbers. If a cell is empty or has a dash, use null.
-12. Student/Script number if visible.
+SHEET LAYOUT UNDERSTANDING:
+- These sheets have a grid/table structure with question numbers in rows.
+- There are TWO common formats:
+  FORMAT 1 (A3 regulation): Columns are typically "Q.No", then sub-columns "a", "b", "c", and a "Total" column per question.
+  FORMAT 2 (R23 regulation): Columns may include "Q.No", sub-columns like "a"/"b" for choice questions, sub-sub-parts "i", "ii", "iii", and section-wise Part A / Part B marks.
+- R23 sheets often have 10 questions with paired questions (1&2, 3&4, 5&6, 7&8, 9&10) where students answer one from each pair.
+- In R23, questions may have Part A (short answer, 2 marks) and Part B (long answer, up to 8 marks) with sub-parts.
+
+CRITICAL EXTRACTION RULES:
+1. Read EVERY handwritten digit VERY carefully. Pay close attention to distinguish between 0, 1, 2, 3, 4, 5, 6, 7, 8, 9.
+2. For each question row, extract ALL marks visible in every column/sub-column.
+3. The "total" for each question should be the value written in that question's total column - do NOT calculate it yourself.
+4. Extract "Total Marks (in figures)" - this is the handwritten grand total at the bottom of the marks area.
+5. Extract the bubble/OMR total: look at the filled/darkened circles in the OMR grid (columns of digits 0-9). Read the tens digit and units digit from which circles are filled.
+6. Extract "Marks in Words" from the tens place and units place fields.
+7. Metadata: Exam name, Branch, Subject Code, Subject Name, Examiner Name, Scrutinizer Name, Month/Year.
+8. Bundle Number / Control Bundle No - usually printed or stamped at top.
+9. Valuation number (1 or 2) - usually marked/circled on the right side.
+10. Student/Script number if visible (often handwritten at top).
+11. If a cell is genuinely empty, has a dash "-", or is not applicable, use null.
+12. For marks, always use integer numbers. Never use strings for marks.
+13. When reading the OMR bubbles: identify which bubble (0-9) is filled for tens place and units place separately, then combine to get bubble_total.
+14. IMPORTANT: Cross-verify your reading. The sum of all question totals should approximately match the written_total and bubble_total. If they don't match, re-examine the marks more carefully.
 
 Return ONLY valid JSON with this exact structure:
 {
@@ -41,29 +51,30 @@ Return ONLY valid JSON with this exact structure:
     {
       "q_no": 1,
       "parts": {
-        "a": number or null,
-        "b": number or null,
-        "c": number or null
+        "a": "number or null - marks in column a",
+        "b": "number or null - marks in column b",
+        "c": "number or null - marks in column c"
       },
       "sub_parts": {
-        "i": number or null,
-        "ii": number or null,
-        "iii": number or null
+        "i": "number or null",
+        "ii": "number or null",
+        "iii": "number or null"
       },
-      "part_a_mark": number or null,
-      "part_b_mark": number or null,
-      "total": number or null
+      "part_a_mark": "number or null - Part A section mark if separate",
+      "part_b_mark": "number or null - Part B section mark if separate",
+      "total": "number or null - the value in the Total column for this question"
     }
   ],
-  "written_total": number or null,
-  "bubble_total": number or null,
+  "written_total": "number or null - the handwritten grand total in figures",
+  "bubble_total": "number or null - the total from OMR filled bubbles",
   "marks_in_words": {
     "tens_place": "string or null",
     "units_place": "string or null"
   }
 }
 
-CRITICAL: Return ONLY the JSON object, no markdown, no code blocks, no explanation.`;
+CRITICAL: Return ONLY the JSON object, no markdown, no code blocks, no explanation.
+CRITICAL: Use actual number values (not strings) for all mark fields. Example: "a": 5, not "a": "5".`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -95,7 +106,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "google/gemini-2.5-pro",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           {
@@ -109,7 +120,7 @@ serve(async (req) => {
               },
               {
                 type: "text",
-                text: "Extract all marks and metadata from this exam valuation sheet. Return ONLY valid JSON.",
+                text: "Extract all marks and metadata from this exam valuation sheet. Read every handwritten digit carefully. Pay special attention to the OMR bubble section - identify which circles are filled. Cross-verify that question totals sum to match the written total. Return ONLY valid JSON.",
               },
             ],
           },
