@@ -242,12 +242,15 @@ function DetailView({ result }) {
   const ocr = result.ocrData;
   if (!ocr) return <p className="text-sm text-muted-foreground">No data extracted</p>;
 
+  const regulation = ocr.regulation || "A3";
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
       {/* Metadata */}
       <div className="space-y-2">
         <h4 className="font-semibold text-foreground flex items-center gap-2">
           <Eye className="w-4 h-4" /> Metadata
+          <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-mono">{regulation}</span>
         </h4>
         <div className="grid grid-cols-2 gap-1 text-xs">
           {Object.entries(ocr.metadata || {}).map(([k, v]) => (
@@ -267,61 +270,82 @@ function DetailView({ result }) {
         </div>
       </div>
 
-      {/* Question marks */}
+      {/* Question marks — regulation-specific */}
       <div className="space-y-2">
         <h4 className="font-semibold text-foreground">Question Marks</h4>
         <div className="overflow-x-auto">
-          <table className="w-full text-xs border border-border rounded">
-            <thead>
-              <tr className="bg-muted/50">
-                <th className="px-2 py-1 text-left">Q</th>
-                <th className="px-2 py-1">a/PartA</th>
-                <th className="px-2 py-1">b/PartB</th>
-                <th className="px-2 py-1">c</th>
-                <th className="px-2 py-1">i</th>
-                <th className="px-2 py-1">ii</th>
-                <th className="px-2 py-1">iii</th>
-                <th className="px-2 py-1">Total</th>
-                <th className="px-2 py-1 font-bold">Highest</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(ocr.questions || []).map((q, qi) => {
-                const highest = result.validation?.highestMarks?.find(
-                  (h) => h.q_no === q.q_no
-                );
-                return (
+          {regulation === "R23" ? (
+            <div className="space-y-3">
+              {/* Part A */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground mb-1">Part A</p>
+                <table className="w-full text-xs border border-border rounded">
+                  <thead>
+                    <tr className="bg-muted/50">
+                      <th className="px-2 py-1 text-left">Q</th>
+                      <th className="px-2 py-1 text-center">Marks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(ocr.partA || []).map((q, qi) => (
+                      <tr key={qi} className="border-t border-border/50">
+                        <td className="px-2 py-1 font-mono font-medium">{q.q_no}</td>
+                        <td className="px-2 py-1 text-center font-mono">{q.marks ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {/* Part B */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground mb-1">Part B</p>
+                <table className="w-full text-xs border border-border rounded">
+                  <thead>
+                    <tr className="bg-muted/50">
+                      <th className="px-2 py-1 text-left">Q</th>
+                      <th className="px-2 py-1 text-center">i</th>
+                      <th className="px-2 py-1 text-center">ii</th>
+                      <th className="px-2 py-1 text-center">iii</th>
+                      <th className="px-2 py-1 text-center font-bold">Sum</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(ocr.partB || []).map((q, qi) => (
+                      <tr key={qi} className="border-t border-border/50">
+                        <td className="px-2 py-1 font-mono font-medium">{q.q_no}</td>
+                        <td className="px-2 py-1 text-center font-mono">{q.i ?? "—"}</td>
+                        <td className="px-2 py-1 text-center font-mono">{q.ii ?? "—"}</td>
+                        <td className="px-2 py-1 text-center font-mono">{q.iii ?? "—"}</td>
+                        <td className="px-2 py-1 text-center font-mono font-bold text-primary">
+                          {(q.i || 0) + (q.ii || 0) + (q.iii || 0)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            /* A3 and other regulations */
+            <table className="w-full text-xs border border-border rounded">
+              <thead>
+                <tr className="bg-muted/50">
+                  <th className="px-2 py-1 text-left">Q</th>
+                  <th className="px-2 py-1 text-center">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(ocr.questions || []).map((q, qi) => (
                   <tr key={qi} className="border-t border-border/50">
                     <td className="px-2 py-1 font-mono font-medium">{q.q_no}</td>
-                    <td className="px-2 py-1 text-center font-mono">
-                      {q.parts?.a ?? q.part_a_mark ?? "—"}
-                    </td>
-                    <td className="px-2 py-1 text-center font-mono">
-                      {q.parts?.b ?? q.part_b_mark ?? "—"}
-                    </td>
-                    <td className="px-2 py-1 text-center font-mono">
-                      {q.parts?.c ?? "—"}
-                    </td>
-                    <td className="px-2 py-1 text-center font-mono">
-                      {q.sub_parts?.i ?? "—"}
-                    </td>
-                    <td className="px-2 py-1 text-center font-mono">
-                      {q.sub_parts?.ii ?? "—"}
-                    </td>
-                    <td className="px-2 py-1 text-center font-mono">
-                      {q.sub_parts?.iii ?? "—"}
-                    </td>
-                    <td className="px-2 py-1 text-center font-mono">
+                    <td className="px-2 py-1 text-center font-mono font-bold text-primary">
                       {q.total ?? "—"}
                     </td>
-                    <td className="px-2 py-1 text-center font-mono font-bold text-primary">
-                      {highest?.highest ?? "—"}
-                    </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </div>
