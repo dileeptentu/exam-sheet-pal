@@ -7,34 +7,42 @@ const corsHeaders = {
 };
 
 const SYSTEM_PROMPT = `You are an expert OCR system for university exam valuation sheets (MVGR College format).
-You must analyze the exam sheet image with EXTREME precision and extract ALL data into structured JSON.
+Analyze the exam sheet image with EXTREME precision and extract ALL data into structured JSON.
 
-SHEET LAYOUT UNDERSTANDING:
-- These sheets have a grid/table structure with question numbers in rows.
-- There are TWO common formats:
-  FORMAT 1 (A3 regulation): Columns are typically "Q.No", then sub-columns "a", "b", "c", and a "Total" column per question.
-  FORMAT 2 (R23 regulation): Columns may include "Q.No", sub-columns like "a"/"b" for choice questions, sub-sub-parts "i", "ii", "iii", and section-wise Part A / Part B marks.
-- R23 sheets often have 10 questions with paired questions (1&2, 3&4, 5&6, 7&8, 9&10) where students answer one from each pair.
-- In R23, questions may have Part A (short answer, 2 marks) and Part B (long answer, up to 8 marks) with sub-parts.
+STEP 1: DETECT THE REGULATION
+- Look for regulation text like "R23", "A3", "R20", etc. in the exam title or header.
+- If the exam title contains "R23" → regulation is "R23"
+- If the exam title contains "A3" → regulation is "A3"
+- Otherwise, use whatever regulation code is visible, or null.
+
+STEP 2: EXTRACT DATA BASED ON REGULATION
+
+FOR A3 REGULATION:
+- Questions are numbered sequentially (1, 2, 3, ...).
+- Each question has sub-columns "a", "b", "c" and a "Total" column.
+- Extract each question with its total from the Total column.
+- Return questions in the "questions" array with q_no and total.
+
+FOR R23 REGULATION:
+- Sheet has TWO sections: Part A and Part B.
+- Part A: Short-answer questions (typically 2 marks each). Usually 5 questions (Q1-Q5 or Q1a, Q2a, etc.). Each has a single mark value.
+- Part B: Long-answer questions with sub-parts i, ii, iii. Usually 5 questions (Q6-Q10 or paired). Each sub-part has its own mark.
+- Return Part A questions in "partA" array with q_no and marks.
+- Return Part B questions in "partB" array with q_no and sub-parts i, ii, iii.
 
 CRITICAL EXTRACTION RULES:
-1. Read EVERY handwritten digit VERY carefully. Pay close attention to distinguish between 0, 1, 2, 3, 4, 5, 6, 7, 8, 9.
-2. For each question row, extract ALL marks visible in every column/sub-column.
-3. The "total" for each question should be the value written in that question's total column - do NOT calculate it yourself.
-4. Extract "Total Marks (in figures)" - this is the handwritten grand total at the bottom of the marks area.
-5. Extract the bubble/OMR total: look at the filled/darkened circles in the OMR grid (columns of digits 0-9). Read the tens digit and units digit from which circles are filled.
-6. Extract "Marks in Words" from the tens place and units place fields.
-7. Metadata: Exam name, Branch, Subject Code, Subject Name, Examiner Name, Scrutinizer Name, Month/Year.
-8. Bundle Number / Control Bundle No - usually printed or stamped at top.
-9. Valuation number (1 or 2) - usually marked/circled on the right side.
-10. Student/Script number if visible (often handwritten at top).
-11. If a cell is genuinely empty, has a dash "-", or is not applicable, use null.
-12. For marks, always use integer numbers. Never use strings for marks.
-13. When reading the OMR bubbles: identify which bubble (0-9) is filled for tens place and units place separately, then combine to get bubble_total.
-14. IMPORTANT: Cross-verify your reading. The sum of all question totals should approximately match the written_total and bubble_total. If they don't match, re-examine the marks more carefully.
+1. Read EVERY handwritten digit carefully. Distinguish 0,1,2,3,4,5,6,7,8,9.
+2. For "Total Marks (in figures)" - the handwritten grand total at the bottom.
+3. For OMR/bubble total: read which circles (0-9) are filled for tens and units place.
+4. If a cell is empty, has a dash, or is not applicable, use null.
+5. All marks must be integers, never strings.
+6. Cross-verify: sum of question marks should approximately match written_total and bubble_total.
 
-Return ONLY valid JSON with this exact structure:
+RETURN FORMAT:
+
+For A3 regulation:
 {
+  "regulation": "A3",
   "bundle_no": "string or null",
   "valuation": 1 or 2 or null,
   "student_no": "string or null",
@@ -48,33 +56,44 @@ Return ONLY valid JSON with this exact structure:
     "month_year": "string or null"
   },
   "questions": [
-    {
-      "q_no": 1,
-      "parts": {
-        "a": "number or null - marks in column a",
-        "b": "number or null - marks in column b",
-        "c": "number or null - marks in column c"
-      },
-      "sub_parts": {
-        "i": "number or null",
-        "ii": "number or null",
-        "iii": "number or null"
-      },
-      "part_a_mark": "number or null - Part A section mark if separate",
-      "part_b_mark": "number or null - Part B section mark if separate",
-      "total": "number or null - the value in the Total column for this question"
-    }
+    { "q_no": 1, "total": 8 },
+    { "q_no": 2, "total": 6 }
   ],
-  "written_total": "number or null - the handwritten grand total in figures",
-  "bubble_total": "number or null - the total from OMR filled bubbles",
-  "marks_in_words": {
-    "tens_place": "string or null",
-    "units_place": "string or null"
-  }
+  "written_total": number or null,
+  "bubble_total": number or null,
+  "marks_in_words": { "tens_place": "string or null", "units_place": "string or null" }
+}
+
+For R23 regulation:
+{
+  "regulation": "R23",
+  "bundle_no": "string or null",
+  "valuation": 1 or 2 or null,
+  "student_no": "string or null",
+  "metadata": {
+    "exam": "string or null",
+    "branch": "string or null",
+    "subject_code": "string or null",
+    "subject_name": "string or null",
+    "examiner_name": "string or null",
+    "scrutinizer_name": "string or null",
+    "month_year": "string or null"
+  },
+  "partA": [
+    { "q_no": 1, "marks": 2 },
+    { "q_no": 2, "marks": 2 }
+  ],
+  "partB": [
+    { "q_no": 6, "i": 3, "ii": 4, "iii": 3 },
+    { "q_no": 7, "i": 5, "ii": 3, "iii": 2 }
+  ],
+  "written_total": number or null,
+  "bubble_total": number or null,
+  "marks_in_words": { "tens_place": "string or null", "units_place": "string or null" }
 }
 
 CRITICAL: Return ONLY the JSON object, no markdown, no code blocks, no explanation.
-CRITICAL: Use actual number values (not strings) for all mark fields. Example: "a": 5, not "a": "5".`;
+CRITICAL: Use actual number values for all mark fields.`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -120,7 +139,7 @@ serve(async (req) => {
               },
               {
                 type: "text",
-                text: "Extract all marks and metadata from this exam valuation sheet. Read every handwritten digit carefully. Pay special attention to the OMR bubble section - identify which circles are filled. Cross-verify that question totals sum to match the written total. Return ONLY valid JSON.",
+                text: "Extract all marks and metadata from this exam valuation sheet. First identify the regulation (R23, A3, etc.) from the header. Then extract marks according to that regulation's format. Return ONLY valid JSON.",
               },
             ],
           },
