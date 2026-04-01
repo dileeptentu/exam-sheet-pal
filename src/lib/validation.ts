@@ -7,21 +7,19 @@ export function validateSheet(ocrData) {
 
   let calculatedTotal = 0;
 
-  if (regulation === "R23") {
-    // R23: Part A (short answers) + Part B (sub-parts i, ii, iii)
+  if (regulation === "A3") {
+    const questions = ocrData.questions || [];
+    calculatedTotal = questions.reduce((sum, q) => sum + (q.total || 0), 0);
+  } else if (regulation === "R23") {
     const partA = ocrData.partA || [];
     const partB = ocrData.partB || [];
 
     const partATotal = partA.reduce((sum, q) => sum + (q.marks || 0), 0);
     const partBTotal = partB.reduce(
-      (sum, q) => sum + (q.i || 0) + (q.ii || 0) + (q.iii || 0),
+      (sum, q) => sum + (q.total || ((q.i || 0) + (q.ii || 0) + (q.iii || 0))),
       0
     );
     calculatedTotal = partATotal + partBTotal;
-  } else {
-    // A3 (and any other regulation): sum of question totals
-    const questions = ocrData.questions || [];
-    calculatedTotal = questions.reduce((sum, q) => sum + (q.total || 0), 0);
   }
 
   const reasons = [];
